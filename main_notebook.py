@@ -65,7 +65,7 @@ def _(mo):
     | Week | Work (section) |
     |---|---|
     | 14–15 | Stratified split; majority baseline; logistic regression versus random forest (Breiman, 2001); tuning on training data only, with class weights (6) |
-    | 17 | Recall, precision, PR-AUC against the baseline; confusion matrix costed as missed leaver vs wasted offer (7) |
+    | 17 | Recall, precision, PR-AUC against the baseline; confusion matrix costed as missed leaver vs wasted offer; robustness check on a chronological hold-out (train on 2014–17 joiners, test on 2018 joiners) (7) |
     | 18 | Survival analysis, which uses the censored members excluded in section 4 (8) |
     | 19 | Fairness audit by age at joining and gender; security threats (9) |
     | 20–21 | Conclusions, limitations, Copilot reflection (10) |
@@ -188,7 +188,7 @@ def _(df_raw, pd):
 @app.cell
 def _(mo):
     mo.md(r"""
-    **Interpretation.** Four findings shape the project. **Age is age at exit:** no member has been enrolled longer than their recorded age (e.g. every age-2 member was enrolled under 2.4 years), which is only possible if age was measured at the end of enrolment. Age at exit therefore partly encodes tenure; section 4 derives age at joining instead. **Children:** a large minority are under 18, and the 19 age-0 records are implausible. **The finish date encodes the label:** every active member ends on the extraction date. **Redundancy:** `HasReferences` duplicates `NumberOfReferences`, two activity flags are always zero, and `NumberOfActivities` is exactly the sum of the flags. Next: does the label mean the same thing for every enrolment year?
+    **Interpretation.** Four findings shape the project. **Age is probably age at exit:** the data article does not say when age was recorded, but no member has been enrolled longer than their recorded age (e.g. every age-2 member was enrolled under 2.4 years). That pattern would be very unlikely if age were recorded at joining. It is strong evidence, not documentary proof, so section 4 derives age at joining and states the uncertainty. **Children:** a large minority are under 18, and 19 are recorded as age 0, which may be infant enrolments or entry errors. **The finish date encodes the label:** every active member ends on the extraction date. **Redundancy:** `HasReferences` duplicates `NumberOfReferences`, two activity flags are always zero, and `NumberOfActivities` is exactly the sum of the flags. Next: does the label mean the same thing for every enrolment year?
     """)
     return
 
@@ -213,7 +213,7 @@ def _(censoring_table, mo):
 
     | Criterion | Verdict |
     |---|---|
-    | Size / completeness | 14,942 members; no blanks or duplicates; 19 implausible ages |
+    | Size / completeness | 14,942 members; no blanks or duplicates; 19 recorded as age 0 |
     | Relevance / provenance | Real dropout records; peer-reviewed data article |
     | Licence | CC BY 4.0 (dataset and article); attribution given |
     | Bias risk | Imbalance, censoring, children, 60/40 female/male |
@@ -229,7 +229,7 @@ def _(mo):
     # 3. Exploratory Data Analysis
     *Authorship: Lead — Gabriel Aina*
 
-    Following Tukey (1977), the data are explored before hypotheses are fixed. The raw data are used, so that the findings justify the cleaning in section 4. First, summary statistics.
+    Following Tukey (1977), the data are explored before hypotheses are fixed. **This section uses all rows, including those later held out for testing.** That is acceptable because its decisions are structural (leakage roles from the documentation, the censoring fix, excluding children), not feature scores fitted to labels. All feature scoring in section 5 uses training rows only. TB2 adds a chronological hold-out as a further check (section 1). First, summary statistics.
     """)
     return
 
@@ -305,7 +305,7 @@ def _(df_raw, pd):
 @app.cell
 def _(mo):
     mo.md(r"""
-    **Interpretation.** Age 0 is a missing-value placeholder, removed with the children in section 4. Zero classes is real behaviour. The extract-date finish means "outcome unknown", not "stayed". No imputation is needed. Next: raw dropout by group, with chi-square tests.
+    **Interpretation.** Age 0 cannot be verified from the documentation: these may be infant enrolments or entry errors. Either way, they are removed with the children in section 4. Zero classes is real behaviour. The extract-date finish means "outcome unknown", not "stayed". No imputation is needed. Next: raw dropout by group, with chi-square tests.
     """)
     return
 
@@ -404,11 +404,11 @@ def _(corr_matrix, mo):
 def _(mo):
     mo.md(r"""
     # 4. Data Cleaning and Preparation
-    *Authorship: Lead — Justin Casey
+    *Authorship: Lead — Richie Adu* **[Group: confirm]**
 
     Each transformation has its own cell, preceded by the problem, decision and rejected alternative.
 
-    **4.1 Missing values: no imputation.** The mechanism is known (section 3): age 0 goes with the children, and the extract-date finish is handled as censoring. Rubin (1976) and van Buuren (2018) both require understanding the missingness mechanism before choosing a remedy; median-imputing age 0 would invent ages for likely children. Zero duplicates were confirmed in section 2.
+    **4.1 Missing values: no imputation.** There are no blank cells. Age-0 records (possibly infants, possibly errors) are removed with the children, and the extract-date finish is handled as censoring. Rubin (1976) and van Buuren (2018) both require understanding the missingness mechanism before choosing a remedy; median-imputing age 0 would invent ages for records that are most likely children either way. Zero duplicates were confirmed in section 2.
 
     **4.2 Drop binned copies, constant columns and `HasReferences`.** These are pure redundancy; keeping them would inflate apparent importance.
     """)
@@ -477,7 +477,7 @@ def _(df_step2, pd):
 @app.cell
 def _(cohort_flow, mo):
     mo.md(f"""
-    **Result:** {cohort_flow['analysis cohort']:,} adults remain ({cohort_flow['analysis cohort'] / cohort_flow['all members']:.0%}). The exclusions are a limitation (section 9). **4.6 Target:** `dropout_12m` = 1 if the member left within 365 days. It is uncensored for everyone in the cohort and matches the one-year horizon of Clavel San Emeterio et al. (2019).
+    **Result:** {cohort_flow['analysis cohort']:,} adults remain ({cohort_flow['analysis cohort'] / cohort_flow['all members']:.0%}). Using age at joining excludes {cohort_flow['of which: recorded as 18+ at exit']} members recorded as adults who probably joined as children. Because age at joining is inferred and accurate to about ±1 year, a few members near the 18 boundary may be misclassified either way; this is small against the cohort size. The exclusions are a limitation (section 9). **4.6 Target:** `dropout_12m` = 1 if the member left within 365 days. It is uncensored for everyone in the cohort and matches the one-year horizon of Clavel San Emeterio et al. (2019).
     """)
     return
 
@@ -838,6 +838,48 @@ def _(derived_comparison, mo):
 @app.cell
 def _(mo):
     mo.md(r"""
+    **Engineered features vs their raw sources.** Does each engineered feature carry more signal than the raw columns it was built from? The next cell compares single-feature ROC-AUC for each feature and its sources (training rows). For season, which is categorical, it compares the chi-square p-value of the four seasons against the twelve raw months.
+    """)
+    return
+
+
+@app.cell
+def _(X_train, df_clean, pd, roc_auc_score, stats, y_train):
+    def _auc(x):
+        return round(max(roc_auc_score(y_train, x), 1 - roc_auc_score(y_train, x)), 3)
+
+    _src = df_clean.loc[X_train.index]
+    _rows = [
+        ("unrestricted_plan", _auc(X_train["unrestricted_plan"]), "AllowedWeeklyVisitsBySLA", _auc(_src["AllowedWeeklyVisitsBySLA"])),
+        ("class_share", _auc(X_train["class_share"]), "AttendedClassesAverage", _auc(_src["AttendedClassesAverage"])),
+        ("class_share", _auc(X_train["class_share"]), "AverageFrequency", _auc(_src["AverageFrequency"])),
+        ("plan_utilisation", _auc(X_train["plan_utilisation"]), "AverageFrequency", _auc(_src["AverageFrequency"])),
+        ("plan_utilisation", _auc(X_train["plan_utilisation"]), "AllowedWeeklyVisitsBySLA", _auc(_src["AllowedWeeklyVisitsBySLA"])),
+    ]
+    engineered_vs_source = pd.DataFrame(_rows, columns=["engineered feature", "engineered AUC", "raw source", "source AUC"])
+    _season = X_train[[c for c in X_train.columns if c.startswith("season_")]].idxmax(axis=1)
+    season_vs_month = pd.Series(
+        {
+            "season (4 groups) chi-square p": round(stats.chi2_contingency(pd.crosstab(_season, y_train))[1], 4),
+            "raw month (12 groups) chi-square p": round(stats.chi2_contingency(pd.crosstab(_src["start_month"], y_train))[1], 4),
+        }
+    )
+    engineered_vs_source
+    return engineered_vs_source, season_vs_month
+
+
+@app.cell
+def _(engineered_vs_source, mo, season_vs_month):
+    _e = engineered_vs_source
+    mo.md(f"""
+    **Interpretation.** No engineered feature clearly beats its strongest raw source on its own (every difference is 0.01 AUC or less): `class_share` (AUC {_e.iloc[1]['engineered AUC']:.2f}) is close to `AttendedClassesAverage` ({_e.iloc[1]['source AUC']:.2f}), and `plan_utilisation` ({_e.iloc[3]['engineered AUC']:.2f}) is weaker than both its sources. Their value is different: `class_share` describes *how* a member uses the facility independently of *how often*, and it later replaces its redundant source in selection. Season is significant ({'p < 0.001' if season_vs_month.iloc[0] < 0.001 else f'p = {season_vs_month.iloc[0]}'}), like raw month ({'p < 0.001' if season_vs_month.iloc[1] < 0.001 else f'p = {season_vs_month.iloc[1]}'}), but with four groups instead of twelve. The honest conclusion is that engineering added interpretability and removed redundancy more than it added new signal.
+    """)
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""
     **Filter: mutual information** (Guyon and Elisseeff, 2003) captures non-linear dependence. Scores are averaged over 10 seeds, and a **noise floor** is set at the 95th percentile of scores against 20 shuffled labels. Training data only.
     """)
     return
@@ -878,7 +920,7 @@ def _(mo):
 
 @app.cell
 def _(LogisticRegression, RANDOM_STATE, StandardScaler, StratifiedKFold, X_train, cross_val_score, make_pipeline, pd, sklearn, y_train):
-    def _l1(c):
+    def make_l1(c):
         # sklearn >= 1.8 expresses L1 via l1_ratio; older versions via penalty="l1"
         _major, _minor = (int(p) for p in sklearn.__version__.split(".")[:2])
         if (_major, _minor) >= (1, 8):
@@ -886,12 +928,12 @@ def _(LogisticRegression, RANDOM_STATE, StandardScaler, StratifiedKFold, X_train
         return LogisticRegression(solver="saga", penalty="l1", C=c, max_iter=5000)
 
     _cv = StratifiedKFold(5, shuffle=True, random_state=RANDOM_STATE)
-    l1_cv = pd.Series({c: cross_val_score(make_pipeline(StandardScaler(), _l1(c)), X_train, y_train, cv=_cv, scoring="roc_auc").mean() for c in [0.001, 0.003, 0.01, 0.03, 0.1, 1.0]}, name="cv_roc_auc").round(4)
+    l1_cv = pd.Series({c: cross_val_score(make_pipeline(StandardScaler(), make_l1(c)), X_train, y_train, cv=_cv, scoring="roc_auc").mean() for c in [0.001, 0.003, 0.01, 0.03, 0.1, 1.0]}, name="cv_roc_auc").round(4)
     l1_best_c = float(l1_cv.idxmax())
-    _fit = make_pipeline(StandardScaler(), _l1(l1_best_c)).fit(X_train, y_train)
+    _fit = make_pipeline(StandardScaler(), make_l1(l1_best_c)).fit(X_train, y_train)
     l1_coefs = pd.Series(_fit[-1].coef_[0], index=X_train.columns, name="l1_coefficient").round(4).sort_values(key=abs, ascending=False)
     l1_cv.to_frame().T
-    return l1_best_c, l1_coefs, l1_cv
+    return l1_best_c, l1_coefs, l1_cv, make_l1
 
 
 @app.cell
@@ -1009,6 +1051,48 @@ def _(threshold_sensitivity):
 
 
 @app.cell
+def _(mo):
+    mo.md(r"""
+    **Selection within each tier combination.** TB2 compares models built on tiers A, A+B and A+B+C. A feature selected alongside Tier C rates might not be selected without them, so the full procedure is re-run **separately for each combination**: L1 is refitted with its own cross-validated `C`, and redundancy is checked within the subset. This gives TB2 a defensible feature set for each comparison.
+    """)
+    return
+
+
+@app.cell
+def _(L1_MIN, RANDOM_STATE, StandardScaler, StratifiedKFold, X_train, cross_val_score, make_l1, make_pipeline, mi_table, pd, tier_a, tier_b, tier_c, y_train):
+    _cv = StratifiedKFold(5, shuffle=True, random_state=RANDOM_STATE)
+    tier_feature_sets = {}
+    _summary = []
+    for _name, _cols in {"A": tier_a, "A+B": tier_a + tier_b, "A+B+C": tier_a + tier_b + tier_c}.items():
+        _X = X_train[_cols]
+        _scores = {c: cross_val_score(make_pipeline(StandardScaler(), make_l1(c)), _X, y_train, cv=_cv, scoring="roc_auc").mean() for c in [0.003, 0.01, 0.03, 0.1, 1.0]}
+        _best_c = max(_scores, key=_scores.get)
+        _coef = pd.Series(make_pipeline(StandardScaler(), make_l1(_best_c)).fit(_X, y_train)[-1].coef_[0], index=_cols)
+        _corr = _X.corr().abs()
+        _redundant = set()
+        for _i, _a in enumerate(_cols):
+            for _b in _cols[_i + 1:]:
+                if _corr.loc[_a, _b] > 0.7 and _a not in _redundant and _b not in _redundant:
+                    _redundant.add(_a if mi_table.loc[_a, "mutual_information"] < mi_table.loc[_b, "mutual_information"] else _b)
+        _rare = {c for c in _cols if _X[c].nunique() == 2 and _X[c].mean() < 0.01}
+        _keep = [c for c in _cols if c not in _redundant | _rare and (mi_table.loc[c, "above_noise_floor"] or abs(_coef[c]) >= L1_MIN)]
+        tier_feature_sets[_name] = _keep
+        _summary.append({"tier set": _name, "candidates": len(_cols), "chosen C": _best_c, "selection CV AUC (train)": round(_scores[_best_c], 3), "features kept": len(_keep), "kept": ", ".join(_keep)})
+    tier_selection = pd.DataFrame(_summary)
+    tier_selection
+    return tier_feature_sets, tier_selection
+
+
+@app.cell
+def _(mo, tier_selection):
+    _t = tier_selection.set_index("tier set")
+    mo.md(f"""
+    **Interpretation.** Season alone (Tier A) keeps {_t.loc['A', 'features kept']} feature(s), with a selection-stage cross-validated AUC of {_t.loc['A', 'selection CV AUC (train)']:.2f}, barely above chance. Adding the service profile (A+B) lifts it to {_t.loc['A+B', 'selection CV AUC (train)']:.2f}. Adding usage rates (A+B+C) changes it by {_t.loc['A+B+C', 'selection CV AUC (train)'] - _t.loc['A+B', 'selection CV AUC (train)']:+.3f}, so Tier C adds almost nothing once Tier B is present. These are training-set figures used only to choose features, not model results. They already suggest that nearly all apparent predictability comes from Tier B, which includes the three features shown to accumulate with tenure. That is an early, honest preview of RQ2, which TB2 must test on the held-out set. The three feature sets are stored as `tier_feature_sets` for TB2.
+    """)
+    return
+
+
+@app.cell
 def _(L1_MIN, feature_tier, final_features, mo, threshold_sensitivity):
     _tiers = {t: [f for f in final_features if feature_tier[f] == t] for t in "ABC"}
     _core = threshold_sensitivity["overlap with chosen set (Jaccard)"]
@@ -1033,7 +1117,7 @@ def _(mo):
     | `Age` (at exit), `Gender`, dates | Quasi-identifiers | Dates and age at exit dropped; age at joining and gender audit only |
     | Plan, activities, usage, spend | Behavioural / financial | Modelled (non-leaking only) |
     | Special category (Art. 9) | None present | — |
-    | Under-18 records | Children's data (Recital 38) | Excluded |
+    | Under-18 records | Children's data (Recital 38) | Excluded (estimated at joining) |
 
     The next cell tests the "anonymised" claim: how many members are unique on age, gender and enrolment date?
     """)
@@ -1064,7 +1148,9 @@ def _(df_raw, pd):
 
 
 @app.cell
-def _(mo, reid_table):
+def _(cohort_flow, df_raw, mo, reid_table):
+    _n_minor_exit = int((df_raw["Age"] < 18).sum())
+    _n_minor_join = int(cohort_flow["excluded: under 18 at joining"])
     mo.md(f"""
     **Interpretation.** {reid_table.iloc[0]:.0%} of members are unique on exact age, gender and enrolment day, so anyone knowing when a friend joined could find their record. Generalising to age band and month cuts this to {reid_table.iloc[1]:.1%} (k-anonymity; Sweeney, 2002); the modelling data hold no dates at all.
 
@@ -1075,7 +1161,7 @@ def _(mo, reid_table):
     | 2 | Discriminatory targeting (dropout varies by age) | Art. 5(1)(a) fairness | Age at joining and gender audit-only; TB2 fairness audit | Barocas and Selbst (2016) |
     | 3 | Unexplained automated decisions | Art. 22 | Interpretable baseline; human review of offers | Mittelstadt et al. (2016) |
     | 4 | Inflated performance (leakage, censoring, tenure accumulation) | Art. 5(1)(d) accuracy | Leakage roles; 12-month window; timing audit; untouched test set | Kaufman et al. (2012) |
-    | 5 | Children's data (2,686 records) | Recital 38; Art. 8 | Excluded from analysis | GDPR text (academic source: TB2 gap) |
+    | 5 | Children's data ({_n_minor_exit:,} recorded under 18 at exit; an estimated {_n_minor_join:,} under 18 at joining) | Recital 38; Art. 8 | Excluded on age at joining, the wider and more protective definition | GDPR text (academic source: TB2 gap) |
 
     **Security:** data stay in the private repository, and the cohort holds no dates or IDs (Art. 5(1)(f); Art. 32); TB2 week 19 covers deployment threats. **Source:** publication was permitted by the facility, and CC BY 4.0 allows reuse with attribution, but the re-identification result means the group treats the data as personal data throughout.
 
