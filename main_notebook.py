@@ -404,7 +404,7 @@ def _(corr_matrix, mo):
 def _(mo):
     mo.md(r"""
     # 4. Data Cleaning and Preparation
-    *Authorship: Lead — Richie Adu* **[Group: confirm]**
+    *Authorship: Lead — Justin Casey
 
     Each transformation has its own cell, preceded by the problem, decision and rejected alternative.
 
